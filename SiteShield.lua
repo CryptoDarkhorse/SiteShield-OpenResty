@@ -349,6 +349,7 @@ function AUTH()
 	return	
 end
 
+-- IP white listing: allow connection
 local allowIPs = ngx.var.allow_ip
 
 for IP in string_gmatch(allowIPs, '([^;]+)') do
@@ -360,6 +361,7 @@ for IP in string_gmatch(allowIPs, '([^;]+)') do
 	end
 end
 
+-- IP black list: block connection
 local blockIPs = ngx.var.block_ip
 
 for IP in string_gmatch(blockIPs, '([^;]+)') do
@@ -371,6 +373,7 @@ for IP in string_gmatch(blockIPs, '([^;]+)') do
 	end
 end
 
+-- URL white listing
 local allowURIs = ngx.var.allow_uri
 
 for get_uri in string_gmatch(allowURIs, '([^;]+)') do
@@ -382,6 +385,7 @@ for get_uri in string_gmatch(allowURIs, '([^;]+)') do
 	end
 end
 
+-- URL blacklisting
 local blockURIs = ngx.var.block_uri
 
 for get_uri in string_gmatch(blockURIs, '([^;]+)') do
@@ -393,8 +397,10 @@ for get_uri in string_gmatch(blockURIs, '([^;]+)') do
 	end
 end
 
+-- get user info from redis server
 local res, err = red:get(usr_hash)
 
+-- new user - send challenge problem
 if (res == ngx.null) then
 	red:hmset(usr_hash, "auth", 0, "timestamp", 0, "question", 0, "answer", 0, "hitcount", 0, "hitcounttimestamp", 0)
 	red:expire(usr_hash, 300)
@@ -406,6 +412,7 @@ if (res == ngx.null) then
 	return
 end
 
+-- get user auth info from redis server
 if (res ~= ngx.null) then 
 	local res, err = red:hmget(usr_hash, "auth", "timestamp")
 	if res then 
@@ -415,11 +422,14 @@ if (res ~= ngx.null) then
 end 
 
 if (tonumber(auth) == 1) then 
+	-- authorized
 	if (tonumber(timestamp) < os.time()) then 
+		-- authorization expired - send challenge again
 		red:hmset(usr_hash, "auth", 0, "timestamp", 0, "question", 0, "answer", 0, "hitcount", 0, "hitcounttimestamp", 0)
 		CHALLENGE()
 		return
 	end
+	-- proxy to real server
 	red:close()	
 	ngx.header["Content-type"] = "text/html"
 	ngx.exit(555)
@@ -427,11 +437,14 @@ if (tonumber(auth) == 1) then
 end
 
 if (tonumber(auth) == 0) then	
+	-- not authorized
 	if (string_find(uri, "/SiteShield/Authenticate")) then
+		-- client sent auth info
 		AUTH()
 		return
 	end
 	if (uri == "/favicon.ico") then
+		-- ???
 		red:close()
 		ngx.header["Content-type"] = "text/html"
 		ngx.exit(503)
